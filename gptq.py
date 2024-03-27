@@ -127,7 +127,8 @@ class GPTQ:
         self.H += inp.matmul(inp.t())
 
     def fasterquant(
-        self, blocksize=128, percdamp=.01, groupsize=-1, actorder=False, static_groups=False
+        self, blocksize=128, percdamp=.01, groupsize=-1, actorder=False, static_groups=False,
+        dct_mode = 0
     ):
         W = self.layer.weight.data.clone()
         if isinstance(self.layer, nn.Conv2d):
@@ -160,7 +161,8 @@ class GPTQ:
             W = W[:, perm]
             H = H[perm][:, perm]
             invperm = torch.argsort(perm)
-        W=dct_2d(W)
+        if dct_mode == 2:
+            W=dct_2d(W)
         Losses = torch.zeros_like(W)
         Q = torch.zeros_like(W)
 
@@ -216,7 +218,8 @@ class GPTQ:
                 self.layer.weight.data[:, i2:] = W[:, i2:]
                 print(torch.sum((self.layer(self.inp1) - self.out1) ** 2))
                 print(torch.sum(Losses))
-        Q = idct_2d(W)
+        if dct_mode == 2:
+            Q = idct_2d(W)
         torch.cuda.synchronize()
         print('time %.2f' % (time.time() - tick))
         print('error', torch.sum(Losses).item())
