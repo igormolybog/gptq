@@ -186,18 +186,22 @@ class GPTQ:
             for i in range(count):
                 w = W1[:, i]
                 d = Hinv1[i, i]
+                
+                if dct_mode == 1:
 
-                if groupsize != -1:
-                    if not static_groups:
-                        if (i1 + i) % groupsize == 0:
-                            self.quantizer.find_params(W[:, (i1 + i):(i1 + i + groupsize)], weight=True)
+                    if groupsize != -1:
+                        if not static_groups:
+                            if (i1 + i) % groupsize == 0:
+                                W_group = torch.split(W[:, (i1 + i):(i1 + i + groupsize)], groupsize, dim=1)
+                                dct_W_group = torch.stack([dct(column, norm='ortho') for column in W_group], dim=1)
+                                self.quantizer.find_params(dct_W_group, weight=True)
                     else:
                         idx = i1 + i
-                        if actorder:
-                            idx = perm[idx]
+                    if actorder:
+                        idx = perm[idx]
                         self.quantizer = groups[idx // groupsize]
 
-                if dct_mode == 1:
+                
                     dct_w = dct(w.unsqueeze(0), norm='ortho').squeeze(0)
                     quantized_dct_w = quantize(
                         dct_w.unsqueeze(1), self.quantizer.scale, self.quantizer.zero, self.quantizer.maxq
@@ -207,7 +211,10 @@ class GPTQ:
                     q = quantize(
                         w.unsqueeze(1), self.quantizer.scale, self.quantizer.zero, self.quantizer.maxq
                     ).flatten()
-                Q1[:, i] = q
+                    
+                q = q.unsqueeze(0).repeat(count, 1)
+                q = q.transpose(0, 1)
+                Q1[:, i * count:(i + 1) * count] = q
                 Losses1[:, i] = (w - q) ** 2 / d ** 2
 
                 err1 = (w - q) / d
