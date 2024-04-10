@@ -183,38 +183,54 @@ class GPTQ:
             Losses1 = torch.zeros_like(W1)
             Hinv1 = Hinv[i1:i2, i1:i2]
 
-            for i in range(count):
-                w = W1[:, i]
-                d = Hinv1[i, i]
-                
-                if dct_mode == 1:
+            for i in range(count):  # loop over each column of W1
+                w = W1[:, i]  # get the current column
+                d = Hinv1[i, i]  # get the corresponding diagonal element of Hinv1
 
-                    if groupsize != -1:
-                        if not static_groups:
-                            if (i1 + i) % groupsize == 0:
-                                W_group = torch.split(W[:, (i1 + i):(i1 + i + groupsize)], groupsize, dim=1)
-                                dct_W_group = torch.stack([dct(column, norm='ortho') for column in W_group], dim=1)
-                                self.quantizer.find_params(dct_W_group, weight=True)
-                    else:
-                        idx = i1 + i
-                    if actorder:
-                        idx = perm[idx]
-                        self.quantizer = groups[idx // groupsize]
+                if dct_mode == 1:  # if DCT mode is enabled
 
-                
-                    dct_w = dct(w.unsqueeze(0), norm='ortho').squeeze(0)
-                    quantized_dct_w = quantize(
-                        dct_w.unsqueeze(1), self.quantizer.scale, self.quantizer.zero, self.quantizer.maxq
-                    ).flatten()
-                    q = idct(quantized_dct_w.unsqueeze(0), norm='ortho').squeeze(0)
-                else:
-                    q = quantize(
-                        w.unsqueeze(1), self.quantizer.scale, self.quantizer.zero, self.quantizer.maxq
-                    ).flatten()
+                    if groupsize != -1:  # if groupsize is not -1
+                        if not static_groups:  # if groups are not static
+                            if (i1 + i) % groupsize == 0:  # if the current column is the first column of a group
+                                W_group = torch.split(W[:, (i1 + i):(i1 + i + groupsize)], groupsize, dim=1)  # split W into groups
+                                dct_W_group = torch.stack([dct(column, norm='ortho') for column in W_group], dim=1)  # apply DCT to each group
+                                self.quantizer.find_params(dct_W_group, weight=True)  # find quantization parameters for each group
+                                dct_w = dct_W_group[:, i]  # get the DCT coefficients for the current column
+                                quantized_dct_w = quantize(
+                                    dct_w.unsqueeze(1), self.quantizer.scale, self.quantizer.zero, self.quantizer.maxq
+                                ).flatten()  # quantize the DCT coefficients
+                                q = idct(quantized_dct_w.unsqueeze(0), norm='ortho').squeeze(0)  # apply inverse DCT to get the quantized column
+                            else:  # if the current column is not the first column of a group
+                                dct_w = dct(w.unsqueeze(0), norm='ortho').squeeze(0)  # apply DCT to the current column
+                                quantized_dct_w = quantize(
+                                    dct_w.unsqueeze(1), self.quantizer.scale, self.quantizer.zero, self.quantizer.maxq
+                                ).flatten()  # quantize the DCT coefficients
+                                q = idct(quantized_dct_w.unsqueeze(0), norm='ortho').squeeze(0)  # apply inverse DCT to get the quantized column
+                        else:  # if groups are static
+                            idx = i1 + i  # compute the index of the current column in the original weight matrix
+                            if actorder:  # if activation ordering is enabled
+                                idx = perm[idx]  # apply the permutation to the index
+                                self.quantizer = groups[idx // groupsize]  # get the quantizer for the current group
+                            dct_w = dct(w.unsqueeze(0), norm='ortho').squeeze(0)  # apply DCT to the current column
+                            quantized_dct_w = quantize(
+                                dct_w.unsqueeze(1), self.quantizer.scale, self.quantizer.zero, self.quantizer.maxq
+                            ).flatten()  # quantize the DCT coefficients
+                            q = idct(quantized_dct_w.unsqueeze(0), norm='ortho').squeeze(0)  # apply inverse DCT to get the quantized column
+                    else:  # if groupsize is -1
+                        idx = i1 + i  # compute the index of the current column in the original weight matrix
+                        if actorder:  # if activation ordering is enabled
+                            idx = perm[idx]  # apply the permutation to the index
+                            self.quantizer = groups[idx // groupsize]  # get the quantizer for the current group
+                        dct_w = dct(w.unsqueeze(0), norm='ortho').squeeze(0)  # apply DCT to the current column
+                        quantized_dct_w = quantize(
+                            dct_w.unsqueeze(1), self.quantizer.scale, self.quantizer.zero, self.quantizer.maxq
+                        ).flatten()  # quantize the DCT coefficients
+                        q = idct(quantized_dct_w.unsqueeze(0), norm='ortho').squeeze(0)  # apply inverse DCT to get the quantized column
+                else: 
+                    q = quantize(w.unsqueeze(1), self.quantizer.scale, self.quantizer.zero, self.quantizer.maxq).flatten()
                     
                 q = q.unsqueeze(0).repeat(count, 1)
-                q = q.transpose(0, 1)
-                Q1[:, i * count:(i + 1) * count] = q
+                Q1[:, i] = q
                 Losses1[:, i] = (w - q) ** 2 / d ** 2
 
                 err1 = (w - q) / d
