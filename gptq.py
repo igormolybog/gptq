@@ -155,8 +155,11 @@ class GPTQ:
                     if groupsize != -1: # if groupsize is not -1
                         if not static_groups:  # if groups are not static
                             if (i1 + i) % groupsize == 0:  # if the current column is the first column of a group
-                                W_group = torch.split(W[:, (i1 + i):(i1 + i + groupsize)], groupsize, dim=1) # split W into groups
+                                remaining_columns = W.shape[1] - (i1 + i)
+                                actual_groupsize = min(groupsize, remaining_columns)
+                                W_group = torch.split(W[:, (i1 + i):(i1 + i + actual_groupsize)], groupsize, dim=1) # split W into groups
                                 dct_W_group = torch.stack([dct(column, norm='ortho') for column in W_group], dim=1) # apply DCT to each group
+                                dct_W_group = dct_W_group.squeeze(0)
                                 self.quantizer.find_params(dct_W_group, weight=True) # find quantization parameters for each group
                     else:
                         idx = i1 + i 
