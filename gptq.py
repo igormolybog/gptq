@@ -177,9 +177,7 @@ class GPTQ:
                     ).flatten()
              
 
-                q = q.unsqueeze(0).repeat(count, 1)
-                q = q.transpose(0, 1)
-                Q1[:, i * count:(i + 1) * count] = q
+                Q1[:, i] = q
                 Losses1[:, i] = (w - q) ** 2 / d ** 2
 
                 err1 = (w - q) / d
