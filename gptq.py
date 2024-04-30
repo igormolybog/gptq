@@ -175,6 +175,7 @@ class GPTQ:
                     quantized_dct_w = quantize(
                         dct_w.unsqueeze(1), self.quantizer.scale, self.quantizer.zero, self.quantizer.maxq
                     ).flatten()
+                    quantized_dct_w[0] = dct_w[0]
                     q = idct(quantized_dct_w.unsqueeze(0), norm='ortho').squeeze(0)
                 else:
                     q = quantize(
