@@ -126,7 +126,12 @@ class Quantizer(nn.Module):
 
     def ready(self):
         return torch.all(self.scale != 0)
-
+    
+    def forward(self, x):
+        
+        if self.enabled():
+            x = quantize(x, self.scale, self.zero, self.maxq)
+        return x
 
 try:
     import quant_cuda
